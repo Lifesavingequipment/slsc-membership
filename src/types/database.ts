@@ -39,6 +39,8 @@ export interface Role {
   club_id: string
   member_id: string
   role_name: string
+  assigned_by: string | null
+  assigned_at: string | null
   is_active: boolean
 }
 

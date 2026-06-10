@@ -1,12 +1,14 @@
 import { useEffect, useState, useCallback, useRef } from 'react'
 import { ChevronLeft, UserPlus, Search, X, Plus, Award, AlertTriangle, Pencil, Trash2 } from 'lucide-react'
 import { supabase } from '../lib/supabase'
+import { useAuth } from '../context/AuthContext'
 import type { Member, Role, Qualification, MemberQualification } from '../types/database'
 import { Button } from '../components/ui/button'
 import { Input } from '../components/ui/input'
 import { Label } from '../components/ui/label'
 import { cn } from '../lib/utils'
 import { useNavigate } from 'react-router-dom'
+import { ROLE_LABELS, ALL_ROLES } from './Roles'
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -661,6 +663,7 @@ interface ProfileViewProps {
 }
 
 function MemberProfile({ member: initialMember, onBack, onUpdated }: ProfileViewProps) {
+  const { user } = useAuth()
   const [member, setMember]   = useState<Member>(initialMember)
   const [mode, setMode]       = useState<ProfileMode>('view')
   const [draft, setDraft]     = useState<Member>(initialMember)
@@ -669,22 +672,29 @@ function MemberProfile({ member: initialMember, onBack, onUpdated }: ProfileView
   const [toast, setToast]     = useState<{ msg: string; type: 'success' | 'error' } | null>(null)
 
   // Roles
-  const [roles, setRoles]         = useState<Role[]>([])
+  const [roles, setRoles]           = useState<Role[]>([])
   const [rolesLoading, setRolesLoading] = useState(true)
-  const [newRole, setNewRole]     = useState('')
-  const [addingRole, setAddingRole] = useState(false)
+  const [showRoleAdd, setShowRoleAdd]   = useState(false)
+  const [newRole, setNewRole]           = useState('')
+  const [addingRole, setAddingRole]     = useState(false)
+  const [revokingId, setRevokingId]     = useState<string | null>(null)
 
   const showToast = useCallback((msg: string, type: 'success' | 'error') => {
     setToast({ msg, type })
   }, [])
 
-  useEffect(() => {
-    supabase
+  const loadRoles = useCallback(async () => {
+    const { data } = await supabase
       .from('roles')
       .select('*')
       .eq('member_id', member.id)
-      .then(({ data }) => { setRoles(data ?? []); setRolesLoading(false) })
+      .eq('is_active', true)
+      .order('assigned_at', { ascending: false })
+    setRoles(data ?? [])
+    setRolesLoading(false)
   }, [member.id])
+
+  useEffect(() => { loadRoles() }, [loadRoles])
 
   // ── Edit helpers ─────────────────────────────────────────────────────────
 
@@ -759,24 +769,32 @@ function MemberProfile({ member: initialMember, onBack, onUpdated }: ProfileView
   // ── Roles ────────────────────────────────────────────────────────────────
 
   const addRole = async () => {
-    const name = newRole.trim()
-    if (!name) return
+    if (!newRole) return
+    const isDuplicate = roles.some(r => r.role_name === newRole && r.is_active)
+    if (isDuplicate) { showToast('This member already has that role.', 'error'); return }
     setAddingRole(true)
-    const { data, error } = await supabase
-      .from('roles')
-      .insert({ member_id: member.id, club_id: member.club_id, role_name: name, is_active: true })
-      .select()
-      .single()
+    const { error } = await supabase.from('roles').insert({
+      member_id:   member.id,
+      club_id:     member.club_id,
+      role_name:   newRole,
+      assigned_by: user?.email ?? null,
+      assigned_at: new Date().toISOString(),
+      is_active:   true,
+    })
     setAddingRole(false)
     if (error) { showToast('Failed to add role.', 'error'); return }
-    setRoles(r => [...r, data])
     setNewRole('')
+    setShowRoleAdd(false)
+    showToast('Role assigned.', 'success')
+    loadRoles()
   }
 
-  const removeRole = async (roleId: string) => {
-    const { error } = await supabase.from('roles').delete().eq('id', roleId)
-    if (error) { showToast('Failed to remove role.', 'error'); return }
-    setRoles(r => r.filter(x => x.id !== roleId))
+  const revokeRole = async (roleId: string) => {
+    setRevokingId(roleId)
+    const { error } = await supabase.from('roles').update({ is_active: false }).eq('id', roleId)
+    setRevokingId(null)
+    if (error) { showToast('Failed to revoke role.', 'error'); return }
+    loadRoles()
   }
 
   // ── Form field ───────────────────────────────────────────────────────────
@@ -992,45 +1010,66 @@ function MemberProfile({ member: initialMember, onBack, onUpdated }: ProfileView
 
           {/* Roles */}
           <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-5 space-y-3">
-            <SectionHeading>Roles</SectionHeading>
+            <div className="flex items-center justify-between">
+              <SectionHeading>Roles</SectionHeading>
+              {!showRoleAdd && (
+                <button
+                  onClick={() => { setShowRoleAdd(true); setNewRole('') }}
+                  className="flex items-center gap-1 text-xs font-medium text-[#E63329] hover:text-red-700"
+                >
+                  <Plus className="w-3.5 h-3.5" /> Add Role
+                </button>
+              )}
+            </div>
+
             {rolesLoading ? (
               <p className="text-xs text-gray-400">Loading…</p>
             ) : roles.length === 0 ? (
               <p className="text-xs text-gray-400">No roles assigned.</p>
             ) : (
-              <ul className="space-y-1.5">
+              <div className="flex flex-wrap gap-2">
                 {roles.map(r => (
-                  <li key={r.id} className="flex items-center justify-between gap-2 text-sm">
-                    <span className={cn(
-                      'flex-1 px-2 py-1 rounded bg-gray-50 border border-gray-200 text-gray-700',
-                      !r.is_active && 'opacity-50 line-through'
-                    )}>
-                      {r.role_name}
-                    </span>
+                  <span
+                    key={r.id}
+                    className="inline-flex items-center gap-1.5 pl-2.5 pr-1.5 py-1 rounded-full text-xs font-medium bg-blue-50 text-blue-800 border border-blue-100"
+                  >
+                    {ROLE_LABELS[r.role_name] ?? r.role_name}
                     <button
-                      onClick={() => removeRole(r.id)}
-                      className="text-gray-400 hover:text-red-500 p-0.5"
-                      aria-label="Remove role"
+                      onClick={() => revokeRole(r.id)}
+                      disabled={revokingId === r.id}
+                      className="text-blue-500 hover:text-red-600 disabled:opacity-50 leading-none"
+                      aria-label={`Revoke ${ROLE_LABELS[r.role_name] ?? r.role_name}`}
                     >
-                      <X className="w-3.5 h-3.5" />
+                      <X className="w-3 h-3" />
                     </button>
-                  </li>
+                  </span>
                 ))}
-              </ul>
+              </div>
             )}
 
-            <div className="flex gap-2">
-              <Input
-                placeholder="New role…"
-                value={newRole}
-                onChange={e => setNewRole(e.target.value)}
-                onKeyDown={e => e.key === 'Enter' && addRole()}
-                className="text-sm h-9"
-              />
-              <Button size="sm" onClick={addRole} disabled={addingRole || !newRole.trim()} className="h-9 px-2.5">
-                <Plus className="w-4 h-4" />
-              </Button>
-            </div>
+            {showRoleAdd && (
+              <div className="flex gap-2 pt-1">
+                <select
+                  value={newRole}
+                  onChange={e => setNewRole(e.target.value)}
+                  className="flex-1 h-9 rounded-md border border-gray-300 bg-white px-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#E63329]"
+                >
+                  <option value="">Select role…</option>
+                  {ALL_ROLES.filter(r => !roles.some(x => x.role_name === r)).map(r => (
+                    <option key={r} value={r}>{ROLE_LABELS[r]}</option>
+                  ))}
+                </select>
+                <Button size="sm" onClick={addRole} disabled={addingRole || !newRole} className="h-9 px-2.5">
+                  {addingRole ? '…' : <Plus className="w-4 h-4" />}
+                </Button>
+                <button
+                  onClick={() => { setShowRoleAdd(false); setNewRole('') }}
+                  className="h-9 px-2 text-gray-400 hover:text-gray-600"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+            )}
           </div>
 
           {/* Metadata */}
