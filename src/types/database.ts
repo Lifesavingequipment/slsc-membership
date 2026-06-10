@@ -41,3 +41,27 @@ export interface Role {
   role_name: string
   is_active: boolean
 }
+
+export interface Qualification {
+  id: string
+  code: string
+  name: string
+  category: string
+  validity_years: number | null
+  renewal_notice_days: number | null
+  country: string | null
+}
+
+export interface MemberQualification {
+  id: string
+  club_id: string
+  member_id: string
+  qualification_id: string
+  issued_date: string | null
+  expiry_date: string | null
+  certificate_number: string | null
+  issued_by: string | null
+  status: string
+  notes: string | null
+  qualification?: Qualification
+}

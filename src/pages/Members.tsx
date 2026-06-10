@@ -1,7 +1,7 @@
-import { useEffect, useState, useCallback } from 'react'
-import { ChevronLeft, UserPlus, Search, X, Plus, Shield } from 'lucide-react'
+import { useEffect, useState, useCallback, useRef } from 'react'
+import { ChevronLeft, UserPlus, Search, X, Plus, Award, AlertTriangle, Pencil, Trash2 } from 'lucide-react'
 import { supabase } from '../lib/supabase'
-import type { Member, Role } from '../types/database'
+import type { Member, Role, Qualification, MemberQualification } from '../types/database'
 import { Button } from '../components/ui/button'
 import { Input } from '../components/ui/input'
 import { Label } from '../components/ui/label'
@@ -115,6 +115,402 @@ function Field({ label, value }: { label: string; value: string }) {
       <p className="text-xs text-gray-400">{label}</p>
       <p className="text-sm text-gray-800 font-medium mt-0.5">{value}</p>
     </div>
+  )
+}
+
+// ─── QUALIFICATIONS ───────────────────────────────────────────────────────────
+
+const CATEGORY_STYLE: Record<string, string> = {
+  patrol:     'bg-blue-100 text-blue-800',
+  irb:        'bg-purple-100 text-purple-800',
+  first_aid:  'bg-red-100 text-red-800',
+  education:  'bg-yellow-100 text-yellow-800',
+}
+
+const QUAL_STATUS_STYLE: Record<string, string> = {
+  current:          'bg-green-100 text-green-800',
+  expired:          'bg-red-100 text-red-700',
+  pending_renewal:  'bg-orange-100 text-orange-700',
+}
+
+function derivedStatus(expiryDate: string | null): string {
+  if (!expiryDate) return 'current'
+  const expiry = new Date(expiryDate)
+  const now    = new Date()
+  if (expiry < now) return 'expired'
+  const days = (expiry.getTime() - now.getTime()) / (1000 * 60 * 60 * 24)
+  if (days <= 90) return 'pending_renewal'
+  return 'current'
+}
+
+function addYears(dateStr: string, years: number): string {
+  const d = new Date(dateStr)
+  d.setFullYear(d.getFullYear() + years)
+  return d.toISOString().split('T')[0]
+}
+
+// ── Qualification modal ───────────────────────────────────────────────────────
+
+interface QualModalProps {
+  memberId: string
+  clubId: string
+  qualifications: Qualification[]
+  existing: MemberQualification | null
+  onClose: () => void
+  onSaved: () => void
+  showToast: (msg: string, type: 'success' | 'error') => void
+}
+
+function QualModal({ memberId, clubId, qualifications, existing, onClose, onSaved, showToast }: QualModalProps) {
+  const [qualId,      setQualId]      = useState(existing?.qualification_id ?? '')
+  const [issuedDate,  setIssuedDate]  = useState(existing?.issued_date ?? '')
+  const [expiryDate,  setExpiryDate]  = useState(existing?.expiry_date ?? '')
+  const [certNumber,  setCertNumber]  = useState(existing?.certificate_number ?? '')
+  const [issuedBy,    setIssuedBy]    = useState(existing?.issued_by ?? '')
+  const [notes,       setNotes]       = useState(existing?.notes ?? '')
+  const [saving,      setSaving]      = useState(false)
+  const [errors,      setErrors]      = useState<Record<string, string>>({})
+  const expiryManual = useRef(!!existing?.expiry_date)
+
+  const selectedQual = qualifications.find(q => q.id === qualId)
+
+  // Auto-calculate expiry when qual or issued date changes (unless user overrode it)
+  useEffect(() => {
+    if (expiryManual.current) return
+    if (selectedQual?.validity_years && issuedDate) {
+      setExpiryDate(addYears(issuedDate, selectedQual.validity_years))
+    } else if (!selectedQual?.validity_years) {
+      setExpiryDate('')
+    }
+  }, [qualId, issuedDate, selectedQual])
+
+  const validate = () => {
+    const errs: Record<string, string> = {}
+    if (!qualId)      errs.qualId      = 'Qualification is required.'
+    if (!issuedDate)  errs.issuedDate  = 'Issued date is required.'
+    setErrors(errs)
+    return Object.keys(errs).length === 0
+  }
+
+  const save = async () => {
+    if (!validate()) return
+    setSaving(true)
+    const status = derivedStatus(expiryDate || null)
+    const payload = {
+      club_id:            clubId,
+      member_id:          memberId,
+      qualification_id:   qualId,
+      issued_date:        issuedDate || null,
+      expiry_date:        expiryDate || null,
+      certificate_number: certNumber || null,
+      issued_by:          issuedBy || null,
+      notes:              notes || null,
+      status,
+    }
+    const { error } = existing
+      ? await supabase.from('member_qualifications').update(payload).eq('id', existing.id)
+      : await supabase.from('member_qualifications').insert(payload)
+    setSaving(false)
+    if (error) { showToast('Failed to save qualification.', 'error'); return }
+    showToast(existing ? 'Qualification updated.' : 'Qualification added.', 'success')
+    onSaved()
+    onClose()
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto">
+        <div className="flex items-center justify-between px-6 pt-5 pb-4 border-b border-gray-100">
+          <h3 className="text-lg font-semibold text-gray-900">
+            {existing ? 'Edit Qualification' : 'Add Qualification'}
+          </h3>
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-600">
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+
+        <div className="px-6 py-5 space-y-4">
+          {/* Qualification dropdown */}
+          <div className="space-y-1">
+            <Label htmlFor="qual-select">Qualification <span className="text-[#E63329]">*</span></Label>
+            <select
+              id="qual-select"
+              value={qualId}
+              onChange={e => { setQualId(e.target.value); expiryManual.current = false }}
+              className={cn(
+                'flex h-10 w-full rounded-md border bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#E63329]',
+                errors.qualId ? 'border-red-400' : 'border-gray-300'
+              )}
+            >
+              <option value="">Select qualification…</option>
+              {qualifications.map(q => (
+                <option key={q.id} value={q.id}>{q.name} ({q.code})</option>
+              ))}
+            </select>
+            {errors.qualId && <p className="text-xs text-[#E63329]">{errors.qualId}</p>}
+          </div>
+
+          {/* Issued date */}
+          <div className="space-y-1">
+            <Label htmlFor="issued-date">Issued Date <span className="text-[#E63329]">*</span></Label>
+            <Input
+              id="issued-date"
+              type="date"
+              value={issuedDate}
+              onChange={e => { setIssuedDate(e.target.value); expiryManual.current = false }}
+              className={errors.issuedDate ? 'border-red-400' : ''}
+            />
+            {errors.issuedDate && <p className="text-xs text-[#E63329]">{errors.issuedDate}</p>}
+          </div>
+
+          {/* Expiry date */}
+          <div className="space-y-1">
+            <Label htmlFor="expiry-date">
+              Expiry Date
+              {selectedQual?.validity_years && (
+                <span className="ml-1 text-xs text-gray-400 font-normal">(auto-calculated, override if needed)</span>
+              )}
+            </Label>
+            <Input
+              id="expiry-date"
+              type="date"
+              value={expiryDate}
+              onChange={e => { setExpiryDate(e.target.value); expiryManual.current = true }}
+            />
+          </div>
+
+          {/* Certificate number */}
+          <div className="space-y-1">
+            <Label htmlFor="cert-number">Certificate Number</Label>
+            <Input
+              id="cert-number"
+              value={certNumber}
+              onChange={e => setCertNumber(e.target.value)}
+              placeholder="Optional"
+            />
+          </div>
+
+          {/* Issued by */}
+          <div className="space-y-1">
+            <Label htmlFor="issued-by">Issued By</Label>
+            <Input
+              id="issued-by"
+              value={issuedBy}
+              onChange={e => setIssuedBy(e.target.value)}
+              placeholder="e.g. SLSA, St John"
+            />
+          </div>
+
+          {/* Notes */}
+          <div className="space-y-1">
+            <Label htmlFor="qual-notes">Notes</Label>
+            <textarea
+              id="qual-notes"
+              value={notes}
+              onChange={e => setNotes(e.target.value)}
+              rows={3}
+              placeholder="Optional"
+              className="flex w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#E63329] resize-none"
+            />
+          </div>
+        </div>
+
+        <div className="flex gap-3 px-6 pb-5">
+          <Button onClick={save} disabled={saving}>{saving ? 'Saving…' : 'Save'}</Button>
+          <Button variant="outline" onClick={onClose} disabled={saving}>Cancel</Button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ── Qualifications section ────────────────────────────────────────────────────
+
+function QualificationsSection({ member, showToast }: { member: Member; showToast: (msg: string, type: 'success' | 'error') => void }) {
+  const [qualifications,       setQualifications]       = useState<Qualification[]>([])
+  const [memberQuals,          setMemberQuals]          = useState<MemberQualification[]>([])
+  const [loading,              setLoading]              = useState(true)
+  const [modalOpen,            setModalOpen]            = useState(false)
+  const [editing,              setEditing]              = useState<MemberQualification | null>(null)
+  const [deletingId,           setDeletingId]           = useState<string | null>(null)
+
+  const loadMemberQuals = useCallback(async () => {
+    const { data } = await supabase
+      .from('member_qualifications')
+      .select('*, qualification:qualifications(*)')
+      .eq('member_id', member.id)
+      .order('issued_date', { ascending: false })
+    setMemberQuals((data ?? []) as MemberQualification[])
+  }, [member.id])
+
+  useEffect(() => {
+    Promise.all([
+      supabase.from('qualifications').select('*').order('name'),
+      loadMemberQuals(),
+    ]).then(([{ data }]) => {
+      setQualifications(data ?? [])
+      setLoading(false)
+    })
+  }, [loadMemberQuals])
+
+  const openAdd  = () => { setEditing(null); setModalOpen(true) }
+  const openEdit = (mq: MemberQualification) => { setEditing(mq); setModalOpen(true) }
+
+  const confirmDelete = async (id: string) => {
+    const { error } = await supabase.from('member_qualifications').delete().eq('id', id)
+    if (error) { showToast('Failed to delete qualification.', 'error'); return }
+    setDeletingId(null)
+    showToast('Qualification removed.', 'success')
+    loadMemberQuals()
+  }
+
+  const expiryIndicator = (mq: MemberQualification) => {
+    if (!mq.expiry_date) return null
+    const status = derivedStatus(mq.expiry_date)
+    if (status === 'expired') return (
+      <span className="flex items-center gap-1 text-xs text-red-600 font-medium">
+        <AlertTriangle className="w-3.5 h-3.5" /> Expired
+      </span>
+    )
+    if (status === 'pending_renewal') return (
+      <span className="flex items-center gap-1 text-xs text-yellow-600 font-medium">
+        <AlertTriangle className="w-3.5 h-3.5" /> Expiring soon
+      </span>
+    )
+    return null
+  }
+
+  return (
+    <>
+      {modalOpen && (
+        <QualModal
+          memberId={member.id}
+          clubId={member.club_id}
+          qualifications={qualifications}
+          existing={editing}
+          onClose={() => setModalOpen(false)}
+          onSaved={loadMemberQuals}
+          showToast={showToast}
+        />
+      )}
+
+      {deletingId && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm p-6 space-y-4">
+            <h3 className="text-base font-semibold text-gray-900">Delete Qualification</h3>
+            <p className="text-sm text-gray-600">Are you sure you want to remove this qualification? This cannot be undone.</p>
+            <div className="flex gap-3">
+              <Button onClick={() => confirmDelete(deletingId)} className="bg-red-600 hover:bg-red-700">Delete</Button>
+              <Button variant="outline" onClick={() => setDeletingId(null)}>Cancel</Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-5">
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="text-sm font-semibold text-gray-900">Qualifications</h3>
+          <Button size="sm" onClick={openAdd}>
+            <Plus className="w-3.5 h-3.5 mr-1.5" />
+            Add Qualification
+          </Button>
+        </div>
+
+        {loading ? (
+          <p className="text-sm text-gray-400 py-4 text-center">Loading…</p>
+        ) : memberQuals.length === 0 ? (
+          <div className="py-8 text-center space-y-3">
+            <Award className="w-10 h-10 text-gray-300 mx-auto" />
+            <p className="text-sm text-gray-400 font-medium">No qualifications recorded</p>
+            <Button size="sm" variant="outline" onClick={openAdd}>
+              <Plus className="w-3.5 h-3.5 mr-1.5" />
+              Add Qualification
+            </Button>
+          </div>
+        ) : (
+          <div className="space-y-3">
+            {memberQuals.map(mq => {
+              const qual   = mq.qualification
+              const status = derivedStatus(mq.expiry_date)
+              return (
+                <div key={mq.id} className="border border-gray-200 rounded-lg p-4 space-y-3">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="space-y-1 min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <p className="text-sm font-semibold text-gray-900">{qual?.name ?? mq.qualification_id}</p>
+                        {qual?.code && (
+                          <span className="text-xs text-gray-500 font-mono">{qual.code}</span>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-2 flex-wrap">
+                        {qual?.category && (
+                          <span className={cn(
+                            'inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium capitalize',
+                            CATEGORY_STYLE[qual.category] ?? 'bg-gray-100 text-gray-600'
+                          )}>
+                            {qual.category.replace('_', ' ')}
+                          </span>
+                        )}
+                        <span className={cn(
+                          'inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium capitalize',
+                          QUAL_STATUS_STYLE[status] ?? 'bg-gray-100 text-gray-600'
+                        )}>
+                          {status.replace('_', ' ')}
+                        </span>
+                        {expiryIndicator(mq)}
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-1.5 shrink-0">
+                      <button
+                        onClick={() => openEdit(mq)}
+                        className="p-1.5 rounded text-gray-400 hover:text-gray-700 hover:bg-gray-100"
+                        aria-label="Edit"
+                      >
+                        <Pencil className="w-3.5 h-3.5" />
+                      </button>
+                      <button
+                        onClick={() => setDeletingId(mq.id)}
+                        className="p-1.5 rounded text-gray-400 hover:text-red-600 hover:bg-red-50"
+                        aria-label="Delete"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-x-6 gap-y-2 text-xs">
+                    <div>
+                      <p className="text-gray-400">Issued</p>
+                      <p className="text-gray-800 font-medium">{fmtDate(mq.issued_date)}</p>
+                    </div>
+                    <div>
+                      <p className="text-gray-400">Expiry</p>
+                      <p className="text-gray-800 font-medium">{mq.expiry_date ? fmtDate(mq.expiry_date) : 'No expiry'}</p>
+                    </div>
+                    {mq.certificate_number && (
+                      <div>
+                        <p className="text-gray-400">Certificate #</p>
+                        <p className="text-gray-800 font-medium">{mq.certificate_number}</p>
+                      </div>
+                    )}
+                    {mq.issued_by && (
+                      <div>
+                        <p className="text-gray-400">Issued by</p>
+                        <p className="text-gray-800 font-medium">{mq.issued_by}</p>
+                      </div>
+                    )}
+                  </div>
+
+                  {mq.notes && (
+                    <p className="text-xs text-gray-500 border-t border-gray-100 pt-2">{mq.notes}</p>
+                  )}
+                </div>
+              )
+            })}
+          </div>
+        )}
+      </div>
+    </>
   )
 }
 
@@ -592,10 +988,6 @@ function MemberProfile({ member: initialMember, onBack, onUpdated }: ProfileView
               </select>
             </div>
 
-            <Button variant="outline" className="w-full" onClick={() => showToast('Qualifications coming soon.', 'success')}>
-              <Shield className="w-4 h-4 mr-2" />
-              View Qualifications
-            </Button>
           </div>
 
           {/* Roles */}
@@ -650,6 +1042,9 @@ function MemberProfile({ member: initialMember, onBack, onUpdated }: ProfileView
           </div>
         </div>
       </div>
+
+      {/* Qualifications — full width below the two-column grid */}
+      <QualificationsSection member={member} showToast={showToast} />
     </div>
   )
 }
