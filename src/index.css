@@ -1,0 +1,19 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  * {
+    box-sizing: border-box;
+  }
+  body {
+    margin: 0;
+    font-family: system-ui, 'Segoe UI', Roboto, sans-serif;
+    background: #ffffff;
+    color: #374151;
+  }
+  #root {
+    width: 100%;
+    min-height: 100vh;
+  }
+}
