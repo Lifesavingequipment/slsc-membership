@@ -1,5 +1,5 @@
 import { useState, type FormEvent } from 'react'
-import { Navigate } from 'react-router-dom'
+import { Navigate, useNavigate } from 'react-router-dom'
 import { Eye, EyeOff, Loader2 } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../context/AuthContext'
@@ -7,7 +7,7 @@ import { Button } from '../components/ui/button'
 import { Input } from '../components/ui/input'
 import { Label } from '../components/ui/label'
 
-type View = 'login' | 'forgot' | 'register'
+type View = 'login' | 'forgot'
 
 // ─── Shared layout wrapper ────────────────────────────────────────────────────
 function PageShell({ children }: { children: React.ReactNode }) {
@@ -88,7 +88,8 @@ function PasswordInput({
 }
 
 // ─── LOGIN VIEW ───────────────────────────────────────────────────────────────
-function LoginForm({ onForgot, onRegister }: { onForgot: () => void; onRegister: () => void }) {
+function LoginForm({ onForgot }: { onForgot: () => void }) {
+  const navigate = useNavigate()
   const [email, setEmail]       = useState('')
   const [password, setPassword] = useState('')
   const [remember, setRemember] = useState(false)
@@ -182,7 +183,7 @@ function LoginForm({ onForgot, onRegister }: { onForgot: () => void; onRegister:
         </div>
       </div>
 
-      <Button type="button" variant="outline" className="w-full" onClick={onRegister}>
+      <Button type="button" variant="outline" className="w-full" onClick={() => navigate('/register')}>
         Register your club
       </Button>
     </form>
@@ -268,114 +269,6 @@ function ForgotPasswordForm({ onBack }: { onBack: () => void }) {
   )
 }
 
-// ─── REGISTER VIEW ────────────────────────────────────────────────────────────
-function RegisterForm({ onBack }: { onBack: () => void }) {
-  const [form, setForm]   = useState({ firstName: '', lastName: '', email: '', password: '', confirm: '' })
-  const [loading, setLoading] = useState(false)
-  const [error, setError]     = useState('')
-  const [success, setSuccess] = useState(false)
-  const [fieldErrors, setFieldErrors] = useState<Partial<typeof form>>({})
-
-  const set = (k: keyof typeof form) => (v: string) => {
-    setForm(f => ({ ...f, [k]: v }))
-    setFieldErrors(p => ({ ...p, [k]: undefined }))
-  }
-
-  const validate = () => {
-    const errs: Partial<typeof form> = {}
-    if (!form.firstName.trim())               errs.firstName = 'First name is required.'
-    if (!form.lastName.trim())                errs.lastName  = 'Last name is required.'
-    if (!form.email)                          errs.email     = 'Email is required.'
-    else if (!/\S+@\S+\.\S+/.test(form.email)) errs.email   = 'Enter a valid email address.'
-    if (!form.password)                       errs.password  = 'Password is required.'
-    else if (form.password.length < 8)        errs.password  = 'Password must be at least 8 characters.'
-    if (!form.confirm)                        errs.confirm   = 'Please confirm your password.'
-    else if (form.confirm !== form.password)  errs.confirm   = 'Passwords do not match.'
-    setFieldErrors(errs)
-    return Object.keys(errs).length === 0
-  }
-
-  const handleSubmit = async (e: FormEvent) => {
-    e.preventDefault()
-    setError('')
-    if (!validate()) return
-    setLoading(true)
-    const { error } = await supabase.auth.signUp({
-      email: form.email,
-      password: form.password,
-      options: {
-        data: { full_name: `${form.firstName} ${form.lastName}`, first_name: form.firstName, last_name: form.lastName },
-      },
-    })
-    if (error) setError(friendlyAuthError(error.message))
-    else setSuccess(true)
-    setLoading(false)
-  }
-
-  if (success) {
-    return (
-      <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 space-y-4">
-        <Alert type="success" msg="Account created! Check your email to confirm your address before signing in." />
-        <button type="button" onClick={onBack} className="text-sm text-[#E63329] hover:underline">
-          ← Back to login
-        </button>
-      </div>
-    )
-  }
-
-  return (
-    <form onSubmit={handleSubmit} className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 space-y-4" noValidate>
-      <div>
-        <h2 className="font-semibold text-gray-900 text-lg">Register your club</h2>
-        <p className="text-sm text-gray-500 mt-1">Create an account to get started.</p>
-      </div>
-
-      <div className="grid grid-cols-2 gap-3">
-        <div className="space-y-1.5">
-          <Label htmlFor="reg-first">First name</Label>
-          <Input id="reg-first" value={form.firstName} onChange={e => set('firstName')(e.target.value)} autoComplete="given-name" />
-          <FieldError msg={fieldErrors.firstName} />
-        </div>
-        <div className="space-y-1.5">
-          <Label htmlFor="reg-last">Last name</Label>
-          <Input id="reg-last" value={form.lastName} onChange={e => set('lastName')(e.target.value)} autoComplete="family-name" />
-          <FieldError msg={fieldErrors.lastName} />
-        </div>
-      </div>
-
-      <div className="space-y-1.5">
-        <Label htmlFor="reg-email">Email</Label>
-        <Input id="reg-email" type="email" value={form.email} onChange={e => set('email')(e.target.value)} autoComplete="email" />
-        <FieldError msg={fieldErrors.email} />
-      </div>
-
-      <div className="space-y-1.5">
-        <Label htmlFor="reg-password">Password</Label>
-        <PasswordInput id="reg-password" value={form.password} onChange={set('password')} autoComplete="new-password" />
-        <FieldError msg={fieldErrors.password} />
-      </div>
-
-      <div className="space-y-1.5">
-        <Label htmlFor="reg-confirm">Confirm password</Label>
-        <PasswordInput id="reg-confirm" value={form.confirm} onChange={set('confirm')} autoComplete="new-password" />
-        <FieldError msg={fieldErrors.confirm} />
-      </div>
-
-      {error && <Alert type="error" msg={error} />}
-
-      <Button type="submit" className="w-full" disabled={loading}>
-        {loading
-          ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Creating account…</>
-          : 'Create account'}
-      </Button>
-
-      <button type="button" onClick={onBack} className="block text-sm text-[#E63329] hover:underline">
-        ← Back to login
-      </button>
-    </form>
-  )
-}
-
 // ─── Friendly error messages ──────────────────────────────────────────────────
 function friendlyAuthError(msg: string): string {
   if (msg.includes('Invalid login credentials'))  return 'Incorrect email or password. Please try again.'
@@ -395,9 +288,8 @@ export function Login() {
 
   return (
     <PageShell>
-      {view === 'login'    && <LoginForm    onForgot={() => setView('forgot')}   onRegister={() => setView('register')} />}
-      {view === 'forgot'   && <ForgotPasswordForm onBack={() => setView('login')} />}
-      {view === 'register' && <RegisterForm       onBack={() => setView('login')} />}
+      {view === 'login'  && <LoginForm  onForgot={() => setView('forgot')} />}
+      {view === 'forgot' && <ForgotPasswordForm onBack={() => setView('login')} />}
     </PageShell>
   )
 }
