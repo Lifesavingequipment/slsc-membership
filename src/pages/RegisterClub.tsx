@@ -146,14 +146,14 @@ function StepIndicator({ current, total }: { current: number; total: number }) {
                 }`}>
                   {done ? <Check className="w-4 h-4" /> : step}
                 </div>
-                <span className={`text-xs mt-1 font-medium whitespace-nowrap ${
+                <span className={`hidden sm:block text-xs mt-1 font-medium whitespace-nowrap ${
                   active ? 'text-[#E63329]' : done ? 'text-gray-600' : 'text-gray-400'
                 }`}>
                   {labels[i]}
                 </span>
               </div>
               {i < total - 1 && (
-                <div className={`h-0.5 flex-1 mx-2 mb-4 transition-colors ${
+                <div className={`h-0.5 flex-1 mx-2 mb-0 sm:mb-4 transition-colors ${
                   done ? 'bg-[#E63329]' : 'bg-gray-200'
                 }`} />
               )}
@@ -161,6 +161,9 @@ function StepIndicator({ current, total }: { current: number; total: number }) {
           )
         })}
       </div>
+      <p className="sm:hidden text-xs text-center text-gray-500 mt-1 mb-2">
+        Step {current} of {total}: <span className="font-medium text-gray-700">{labels[current - 1]}</span>
+      </p>
       <div className="w-full bg-gray-100 rounded-full h-1.5 mt-1">
         <div
           className="bg-gradient-to-r from-[#E63329] to-[#FFD700] h-1.5 rounded-full transition-all duration-500"
@@ -273,7 +276,7 @@ function Step1({
         </div>
       </div>
 
-      <div className="grid grid-cols-2 gap-3">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         <div className="space-y-1.5">
           <Label htmlFor="country">Country <span className="text-[#E63329]">*</span></Label>
           <select
@@ -283,7 +286,7 @@ function Step1({
               onChange('country', e.target.value)
               onChange('stateRegion', '')
             }}
-            className="flex h-10 w-full rounded-md border border-gray-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#E63329] focus:border-transparent"
+            className="flex h-11 sm:h-10 w-full rounded-md border border-gray-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#E63329] focus:border-transparent"
           >
             <option value="AUS">Australia</option>
             <option value="NZL">New Zealand</option>
@@ -298,7 +301,7 @@ function Step1({
             id="state"
             value={data.stateRegion}
             onChange={e => { onChange('stateRegion', e.target.value); setErrors(p => ({ ...p, stateRegion: undefined })) }}
-            className="flex h-10 w-full rounded-md border border-gray-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#E63329] focus:border-transparent"
+            className="flex h-11 sm:h-10 w-full rounded-md border border-gray-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#E63329] focus:border-transparent"
           >
             <option value="">Select…</option>
             {stateOptions.map(s => <option key={s} value={s}>{s}</option>)}
@@ -399,7 +402,7 @@ function Step2({
         <p className="text-sm text-gray-500 mt-0.5">This account will be the club administrator login.</p>
       </div>
 
-      <div className="grid grid-cols-2 gap-3">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         <div className="space-y-1.5">
           <Label htmlFor="admin-first">First name <span className="text-[#E63329]">*</span></Label>
           <Input id="admin-first" value={data.firstName} onChange={e => set('firstName')(e.target.value)} autoComplete="given-name" />

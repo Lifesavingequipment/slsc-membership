@@ -96,11 +96,11 @@ function Toast({ msg, type, onDone }: { msg: string; type: 'success' | 'error'; 
   }, [onDone])
   return (
     <div className={cn(
-      'fixed bottom-6 right-6 z-50 flex items-center gap-3 px-4 py-3 rounded-xl shadow-lg text-sm font-medium transition-all',
+      'fixed bottom-20 right-4 md:bottom-6 md:right-6 z-50 flex items-center gap-3 px-4 py-3 rounded-xl shadow-lg text-sm font-medium transition-all max-w-xs md:max-w-none',
       type === 'success' ? 'bg-green-600 text-white' : 'bg-red-600 text-white'
     )}>
       {msg}
-      <button onClick={onDone} className="opacity-70 hover:opacity-100"><X className="w-4 h-4" /></button>
+      <button onClick={onDone} className="opacity-70 hover:opacity-100 min-h-[32px] flex items-center"><X className="w-4 h-4" /></button>
     </div>
   )
 }
@@ -220,8 +220,8 @@ function QualModal({ memberId, clubId, qualifications, existing, onClose, onSave
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto">
+    <div className="fixed inset-0 z-50 flex items-end md:items-center justify-center bg-black/40 md:p-4">
+      <div className="bg-white rounded-t-2xl md:rounded-2xl shadow-2xl w-full md:max-w-lg overflow-y-auto" style={{ maxHeight: '90vh' }}>
         <div className="flex items-center justify-between px-6 pt-5 pb-4 border-b border-gray-100">
           <h3 className="text-lg font-semibold text-gray-900">
             {existing ? 'Edit Qualification' : 'Add Qualification'}
@@ -317,9 +317,9 @@ function QualModal({ memberId, clubId, qualifications, existing, onClose, onSave
           </div>
         </div>
 
-        <div className="flex gap-3 px-6 pb-5">
-          <Button onClick={save} disabled={saving}>{saving ? 'Saving…' : 'Save'}</Button>
-          <Button variant="outline" onClick={onClose} disabled={saving}>Cancel</Button>
+        <div className="flex flex-col sm:flex-row gap-3 px-6 pb-5">
+          <Button onClick={save} disabled={saving} className="w-full sm:w-auto">{saving ? 'Saving…' : 'Save'}</Button>
+          <Button variant="outline" onClick={onClose} disabled={saving} className="w-full sm:w-auto">Cancel</Button>
         </div>
       </div>
     </div>
@@ -563,26 +563,26 @@ function MembersList({ onView }: ListViewProps) {
           <p className="text-gray-500 text-sm mt-0.5">{counts.total} member{counts.total !== 1 ? 's' : ''} in your club</p>
         </div>
         <Button onClick={() => navigate('/members/add')}>
-          <UserPlus className="w-4 h-4 mr-2" />
-          Add Member
+          <UserPlus className="w-4 h-4 md:mr-2" />
+          <span className="hidden md:inline">Add Member</span>
         </Button>
       </div>
 
-      {/* Stat cards */}
-      <div className="flex gap-3">
+      {/* Stat cards — 2x2 on mobile, flex row on md+ */}
+      <div className="grid grid-cols-2 gap-3 md:flex md:gap-3">
         <StatCard label="Total"     value={counts.total} />
         <StatCard label="Active"    value={counts.active}    accent="text-green-600" />
         <StatCard label="Inactive"  value={counts.inactive}  accent="text-gray-500" />
         <StatCard label="Suspended" value={counts.suspended} accent="text-red-600" />
       </div>
 
-      {/* Search + filters */}
-      <div className="flex gap-3 flex-wrap">
-        <div className="relative flex-1 min-w-48">
+      {/* Search + filters — stacked on mobile */}
+      <div className="flex flex-col gap-3 md:flex-row md:flex-wrap">
+        <div className="relative w-full md:flex-1 md:min-w-48">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
           <Input
             placeholder="Search name, email, SLSA number…"
-            className="pl-9"
+            className="pl-9 h-11 md:h-10"
             value={search}
             onChange={e => setSearch(e.target.value)}
           />
@@ -590,7 +590,7 @@ function MembersList({ onView }: ListViewProps) {
         <select
           value={statusFilter}
           onChange={e => setStatusFilter(e.target.value)}
-          className="h-10 rounded-md border border-gray-300 bg-white px-3 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-[#E63329]"
+          className="h-11 md:h-10 w-full md:w-auto rounded-md border border-gray-300 bg-white px-3 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-[#E63329]"
         >
           <option value="">All statuses</option>
           {STATUS_OPTIONS.map(s => <option key={s} value={s} className="capitalize">{s.charAt(0).toUpperCase() + s.slice(1)}</option>)}
@@ -598,15 +598,48 @@ function MembersList({ onView }: ListViewProps) {
         <select
           value={typeFilter}
           onChange={e => setTypeFilter(e.target.value)}
-          className="h-10 rounded-md border border-gray-300 bg-white px-3 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-[#E63329]"
+          className="h-11 md:h-10 w-full md:w-auto rounded-md border border-gray-300 bg-white px-3 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-[#E63329]"
         >
           <option value="">All types</option>
           {TYPE_OPTIONS.map(t => <option key={t} value={t} className="capitalize">{t.charAt(0).toUpperCase() + t.slice(1)}</option>)}
         </select>
       </div>
 
-      {/* Table */}
-      <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+      {/* Mobile cards */}
+      {loading ? (
+        <div className="md:hidden space-y-3">
+          {[...Array(4)].map((_, i) => (
+            <div key={i} className="h-20 bg-white border border-gray-200 rounded-xl animate-pulse" />
+          ))}
+        </div>
+      ) : filtered.length === 0 ? (
+        <div className="md:hidden bg-white rounded-xl border border-gray-200 shadow-sm p-10 text-center">
+          <p className="text-gray-400 font-medium">No members found</p>
+          <p className="text-gray-400 text-sm mt-1">Try adjusting your search or filters.</p>
+        </div>
+      ) : (
+        <div className="md:hidden space-y-3">
+          {filtered.map(m => (
+            <div key={m.id} className="bg-white rounded-xl border border-gray-200 shadow-sm p-4 flex items-start justify-between gap-3">
+              <div className="flex items-start gap-3 min-w-0">
+                <Avatar member={m} size="md" />
+                <div className="min-w-0">
+                  <p className="font-medium text-gray-900 truncate">{displayName(m)}</p>
+                  <p className="text-xs text-gray-400 mt-0.5">{fmt(m.slsa_member_number)}</p>
+                  <div className="flex items-center gap-1.5 mt-1.5 flex-wrap">
+                    <TypeBadge type={m.membership_type} />
+                    <StatusBadge status={m.membership_status} />
+                  </div>
+                </div>
+              </div>
+              <Button size="sm" variant="outline" onClick={() => onView(m)} className="shrink-0 mt-0.5 min-h-[36px]">View</Button>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Desktop table */}
+      <div className="hidden md:block bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
         {loading ? (
           <div className="p-10 text-center text-gray-400">Loading members…</div>
         ) : filtered.length === 0 ? (
@@ -881,7 +914,7 @@ function MemberProfile({ member: initialMember, onBack, onUpdated }: ProfileView
               {/* Personal */}
               <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-5">
                 <SectionHeading>Personal</SectionHeading>
-                <div className="grid grid-cols-2 gap-x-8 gap-y-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-8 gap-y-4">
                   <Field label="First name"     value={fmt(member.first_name)} />
                   <Field label="Last name"      value={fmt(member.last_name)} />
                   <Field label="Preferred name" value={fmt(member.preferred_name)} />
@@ -893,7 +926,7 @@ function MemberProfile({ member: initialMember, onBack, onUpdated }: ProfileView
               {/* Contact */}
               <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-5">
                 <SectionHeading>Contact</SectionHeading>
-                <div className="grid grid-cols-2 gap-x-8 gap-y-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-8 gap-y-4">
                   <Field label="Email"    value={fmt(member.email)} />
                   <Field label="Phone"    value={fmt(member.phone)} />
                   <Field label="Address"  value={fmt(member.address)} />
@@ -906,7 +939,7 @@ function MemberProfile({ member: initialMember, onBack, onUpdated }: ProfileView
               {/* Membership */}
               <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-5">
                 <SectionHeading>Membership</SectionHeading>
-                <div className="grid grid-cols-2 gap-x-8 gap-y-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-8 gap-y-4">
                   <Field label="SLSA number"      value={fmt(member.slsa_member_number)} />
                   <Field label="Membership type"  value={fmt(member.membership_type)} />
                   <Field label="Membership status" value={fmt(member.membership_status)} />
@@ -917,7 +950,7 @@ function MemberProfile({ member: initialMember, onBack, onUpdated }: ProfileView
               {/* Emergency Contact */}
               <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-5">
                 <SectionHeading>Emergency Contact</SectionHeading>
-                <div className="grid grid-cols-2 gap-x-8 gap-y-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-8 gap-y-4">
                   <Field label="Name"         value={fmt(member.emergency_contact_name)} />
                   <Field label="Phone"        value={fmt(member.emergency_contact_phone)} />
                   <Field label="Relationship" value={fmt(member.emergency_contact_relation)} />
@@ -929,7 +962,7 @@ function MemberProfile({ member: initialMember, onBack, onUpdated }: ProfileView
             <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-5 space-y-6">
               <div>
                 <SectionHeading>Personal</SectionHeading>
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <EditField label="First name"     fieldKey="first_name"     required />
                   <EditField label="Last name"      fieldKey="last_name"      required />
                   <EditField label="Preferred name" fieldKey="preferred_name" />
@@ -940,7 +973,7 @@ function MemberProfile({ member: initialMember, onBack, onUpdated }: ProfileView
 
               <div>
                 <SectionHeading>Contact</SectionHeading>
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <EditField label="Email"    fieldKey="email" type="email" required />
                   <EditField label="Phone"    fieldKey="phone" type="tel" />
                   <EditField label="Address"  fieldKey="address" />
@@ -952,7 +985,7 @@ function MemberProfile({ member: initialMember, onBack, onUpdated }: ProfileView
 
               <div>
                 <SectionHeading>Membership</SectionHeading>
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <EditField label="SLSA member number" fieldKey="slsa_member_number" />
                   <EditSelect label="Membership type"   fieldKey="membership_type"   options={TYPE_OPTIONS} />
                   <EditSelect label="Membership status" fieldKey="membership_status" options={STATUS_OPTIONS} />
@@ -962,18 +995,18 @@ function MemberProfile({ member: initialMember, onBack, onUpdated }: ProfileView
 
               <div>
                 <SectionHeading>Emergency Contact</SectionHeading>
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <EditField label="Name"         fieldKey="emergency_contact_name" />
                   <EditField label="Phone"        fieldKey="emergency_contact_phone" type="tel" />
                   <EditField label="Relationship" fieldKey="emergency_contact_relation" />
                 </div>
               </div>
 
-              <div className="flex gap-3 pt-2 border-t border-gray-100">
-                <Button onClick={saveChanges} disabled={saving}>
+              <div className="flex flex-col sm:flex-row gap-3 pt-2 border-t border-gray-100">
+                <Button onClick={saveChanges} disabled={saving} className="w-full sm:w-auto">
                   {saving ? 'Saving…' : 'Save Changes'}
                 </Button>
-                <Button variant="outline" onClick={cancelEdit} disabled={saving}>Cancel</Button>
+                <Button variant="outline" onClick={cancelEdit} disabled={saving} className="w-full sm:w-auto">Cancel</Button>
               </div>
             </div>
           )}

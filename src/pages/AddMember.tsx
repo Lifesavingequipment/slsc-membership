@@ -409,8 +409,8 @@ export function AddMember() {
         )}
 
         {/* ── Actions ──────────────────────────────────────────────────────── */}
-        <div className="flex gap-3 pb-8">
-          <Button type="submit" disabled={loading} className="min-w-[140px]">
+        <div className="flex flex-col sm:flex-row gap-3 pb-8">
+          <Button type="submit" disabled={loading} className="w-full sm:w-auto sm:min-w-[140px]">
             {loading ? (
               <span className="flex items-center gap-2">
                 <Loader2 className="w-4 h-4 animate-spin" />
@@ -425,6 +425,7 @@ export function AddMember() {
             variant="outline"
             onClick={() => navigate('/members')}
             disabled={loading}
+            className="w-full sm:w-auto"
           >
             Cancel
           </Button>

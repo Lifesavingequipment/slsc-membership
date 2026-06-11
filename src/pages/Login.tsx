@@ -15,7 +15,7 @@ function PageShell({ children }: { children: React.ReactNode }) {
     <div className="min-h-screen flex">
       <div className="w-2 bg-gradient-to-b from-[#E63329] to-[#FFD700]" />
       <div className="flex-1 flex items-center justify-center bg-gray-50 px-4 py-10">
-        <div className="w-full max-w-sm">
+        <div className="w-full max-w-sm px-0 sm:px-0">
           <div className="mb-8 text-center">
             <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-[#E63329] mb-4">
               <span className="text-white font-bold text-2xl">SL</span>

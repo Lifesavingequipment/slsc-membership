@@ -264,7 +264,7 @@ export function Dashboard() {
       </div>
 
       {/* ── Stat cards ── */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         <StatCard label="Total Members"    value={stats.totalMembers}    icon={Users}     color="bg-blue-500"     loading={loading} />
         <StatCard label="Active Members"   value={stats.activeMembers}   icon={UserCheck} color="bg-green-500"    loading={loading} />
         <StatCard label="Inactive Members" value={stats.inactiveMembers} icon={UserX}     color="bg-gray-400"     loading={loading} />

@@ -109,8 +109,8 @@ function AssignModal({ members, existingRoles, clubId, currentUserEmail, onClose
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md">
+    <div className="fixed inset-0 z-50 flex items-end md:items-center justify-center bg-black/40 md:p-4">
+      <div className="bg-white rounded-t-2xl md:rounded-2xl shadow-2xl w-full md:max-w-md overflow-y-auto" style={{ maxHeight: '90vh' }}>
         <div className="flex items-center justify-between px-6 pt-5 pb-4 border-b border-gray-100">
           <h3 className="text-lg font-semibold text-gray-900">Assign Role</h3>
           <button onClick={onClose} className="text-gray-400 hover:text-gray-600">
@@ -173,11 +173,11 @@ function AssignModal({ members, existingRoles, clubId, currentUserEmail, onClose
           {error && <p className="text-sm text-[#E63329]">{error}</p>}
         </div>
 
-        <div className="flex gap-3 px-6 pb-5">
-          <Button onClick={save} disabled={saving}>
+        <div className="flex flex-col sm:flex-row gap-3 px-6 pb-5">
+          <Button onClick={save} disabled={saving} className="w-full sm:w-auto">
             {saving ? 'Assigning…' : 'Assign Role'}
           </Button>
-          <Button variant="outline" onClick={onClose} disabled={saving}>Cancel</Button>
+          <Button variant="outline" onClick={onClose} disabled={saving} className="w-full sm:w-auto">Cancel</Button>
         </div>
       </div>
     </div>
@@ -249,8 +249,8 @@ export function Roles() {
             </p>
           </div>
           <Button onClick={() => setModal(true)}>
-            <Plus className="w-4 h-4 mr-2" />
-            Assign Role
+            <Plus className="w-4 h-4 md:mr-2" />
+            <span className="hidden md:inline">Assign Role</span>
           </Button>
         </div>
 
@@ -278,7 +278,7 @@ export function Roles() {
           <select
             value={filter}
             onChange={e => setFilter(e.target.value)}
-            className="h-10 rounded-md border border-gray-300 bg-white px-3 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-[#E63329]"
+            className="h-11 md:h-10 w-full md:w-auto rounded-md border border-gray-300 bg-white px-3 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-[#E63329]"
           >
             <option value="">All roles</option>
             {ALL_ROLES.map(r => (
@@ -288,15 +288,59 @@ export function Roles() {
           {filter && (
             <button
               onClick={() => setFilter('')}
-              className="flex items-center gap-1 text-sm text-gray-500 hover:text-gray-800"
+              className="flex items-center gap-1 text-sm text-gray-500 hover:text-gray-800 whitespace-nowrap"
             >
               <X className="w-3.5 h-3.5" /> Clear filter
             </button>
           )}
         </div>
 
-        {/* Table */}
-        <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+        {/* Mobile cards */}
+        {loading ? (
+          <div className="md:hidden space-y-3">
+            {[...Array(3)].map((_, i) => (
+              <div key={i} className="h-20 bg-white border border-gray-200 rounded-xl animate-pulse" />
+            ))}
+          </div>
+        ) : filtered.length === 0 ? (
+          <div className="md:hidden bg-white rounded-xl border border-gray-200 shadow-sm p-10 text-center space-y-2">
+            <ShieldCheck className="w-10 h-10 text-gray-300 mx-auto" />
+            <p className="text-gray-400 font-medium">
+              {filter ? 'No assignments for this role' : 'No active role assignments'}
+            </p>
+          </div>
+        ) : (
+          <div className="md:hidden space-y-3">
+            {filtered.map(r => (
+              <div key={r.id} className="bg-white rounded-xl border border-gray-200 shadow-sm p-4 flex items-start justify-between gap-3">
+                <div className="flex items-start gap-3 min-w-0">
+                  {r.member && <Avatar member={r.member} />}
+                  <div className="min-w-0">
+                    <p className="font-medium text-gray-900 truncate">
+                      {r.member ? displayName(r.member) : <span className="text-gray-400 italic">Unknown</span>}
+                    </p>
+                    <div className="mt-1">
+                      <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium bg-blue-50 text-blue-800">
+                        {ROLE_LABELS[r.role_name] ?? r.role_name}
+                      </span>
+                    </div>
+                    <p className="text-xs text-gray-400 mt-1">{fmtDate(r.assigned_at)}</p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => revoke(r.id)}
+                  disabled={revoking === r.id}
+                  className="text-xs font-medium text-red-600 hover:text-red-800 disabled:opacity-50 shrink-0 min-h-[44px] px-2 flex items-center"
+                >
+                  {revoking === r.id ? 'Revoking…' : 'Revoke'}
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* Desktop table */}
+        <div className="hidden md:block bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
           {loading ? (
             <div className="p-10 text-center text-gray-400">Loading…</div>
           ) : filtered.length === 0 ? (
