@@ -154,6 +154,19 @@ function SessionDetail() {
     return new Date(session.rsvp_deadline).getTime() < Date.now();
   }, [session?.rsvp_deadline]);
 
+  const goingMemberIds = useMemo(
+    () =>
+      rsvps
+        .filter((r) => r.status === "going")
+        .map((g) =>
+          g.member_id
+            ? g.member_id
+            : members.find((v) => v.auth_user_id === g.user_id)?.id ?? null,
+        )
+        .filter((id): id is string => id !== null),
+    [rsvps, members],
+  );
+
   const rsvp = async (status: RsvpStatus) => {
     if (!user || rsvpClosed) return;
     setBusy(true);
@@ -370,7 +383,7 @@ function SessionDetail() {
             clubId={session.club_id}
             sessionTitle={session.title}
             sessionStartsAt={session.starts_at}
-            goingIds={going.map((g) => g.member_id ?? g.user_id ?? "").filter(Boolean)}
+            goingIds={goingMemberIds}
             canManage={canManage}
           />
         </TabsContent>
