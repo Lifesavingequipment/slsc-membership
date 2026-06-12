@@ -32,6 +32,9 @@ export interface Member {
   auth_user_id: string | null
   created_at: string | null
   updated_at: string | null
+  driver_flag: boolean | null
+  crew_flag: boolean | null
+  patient_flag: boolean | null
 }
 
 export interface Role {

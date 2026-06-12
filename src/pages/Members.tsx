@@ -76,6 +76,16 @@ function TypeBadge({ type }: { type: string }) {
   )
 }
 
+function IrbRoleBadges({ member }: { member: Member }) {
+  const badges = [
+    member.driver_flag  && <span key="driver"  className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">Driver</span>,
+    member.crew_flag    && <span key="crew"    className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">Crew</span>,
+    member.patient_flag && <span key="patient" className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-orange-100 text-orange-800">Patient</span>,
+  ].filter(Boolean)
+  if (badges.length === 0) return null
+  return <div className="flex items-center gap-1.5 flex-wrap mt-1">{badges}</div>
+}
+
 // ─── Stat card ────────────────────────────────────────────────────────────────
 
 function StatCard({ label, value, accent }: { label: string; value: number; accent?: string }) {
@@ -630,6 +640,7 @@ function MembersList({ onView }: ListViewProps) {
                     <TypeBadge type={m.membership_type} />
                     <StatusBadge status={m.membership_status} />
                   </div>
+                  <IrbRoleBadges member={m} />
                 </div>
               </div>
               <Button size="sm" variant="outline" onClick={() => onView(m)} className="shrink-0 mt-0.5 min-h-[36px]">View</Button>
@@ -665,7 +676,10 @@ function MembersList({ onView }: ListViewProps) {
                   <td className="px-4 py-3">
                     <div className="flex items-center gap-3">
                       <Avatar member={m} size="sm" />
-                      <span className="font-medium text-gray-900">{displayName(m)}</span>
+                      <div>
+                        <span className="font-medium text-gray-900">{displayName(m)}</span>
+                        <IrbRoleBadges member={m} />
+                      </div>
                     </div>
                   </td>
                   <td className="px-4 py-3 text-gray-500">{fmt(m.slsa_member_number)}</td>
@@ -771,6 +785,9 @@ function MemberProfile({ member: initialMember, onBack, onUpdated }: ProfileView
         emergency_contact_name:      draft.emergency_contact_name      || null,
         emergency_contact_phone:     draft.emergency_contact_phone     || null,
         emergency_contact_relation:  draft.emergency_contact_relation  || null,
+        driver_flag:   !!draft.driver_flag,
+        crew_flag:     !!draft.crew_flag,
+        patient_flag:  !!draft.patient_flag,
         updated_at: new Date().toISOString(),
       })
       .eq('id', member.id)
@@ -894,10 +911,11 @@ function MemberProfile({ member: initialMember, onBack, onUpdated }: ProfileView
             <Avatar member={member} size="lg" />
             <div>
               <h2 className="text-2xl font-bold text-gray-900">{displayName(member)}</h2>
-              <div className="flex items-center gap-2 mt-1">
+              <div className="flex items-center gap-2 mt-1 flex-wrap">
                 <StatusBadge status={member.membership_status} />
                 <TypeBadge type={member.membership_type} />
               </div>
+              <IrbRoleBadges member={member} />
             </div>
           </div>
         </div>
@@ -999,6 +1017,34 @@ function MemberProfile({ member: initialMember, onBack, onUpdated }: ProfileView
                   <EditField label="Name"         fieldKey="emergency_contact_name" />
                   <EditField label="Phone"        fieldKey="emergency_contact_phone" type="tel" />
                   <EditField label="Relationship" fieldKey="emergency_contact_relation" />
+                </div>
+              </div>
+
+              <div>
+                <SectionHeading>IRB Roles</SectionHeading>
+                <div className="flex gap-3 flex-wrap">
+                  {([
+                    { key: 'driver_flag',  label: 'Driver' },
+                    { key: 'crew_flag',    label: 'Crew' },
+                    { key: 'patient_flag', label: 'Patient' },
+                  ] as { key: keyof Member; label: string }[]).map(({ key, label }) => {
+                    const on = !!draft[key]
+                    return (
+                      <button
+                        key={key}
+                        type="button"
+                        onClick={() => setDraft(d => ({ ...d, [key]: !d[key] }))}
+                        className={cn(
+                          'px-5 py-2 rounded-lg text-sm font-medium border transition-colors',
+                          on
+                            ? 'bg-[#E63329] text-white border-[#E63329]'
+                            : 'bg-white text-gray-400 border-gray-300'
+                        )}
+                      >
+                        {label}
+                      </button>
+                    )
+                  })}
                 </div>
               </div>
 
