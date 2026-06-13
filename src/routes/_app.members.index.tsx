@@ -127,13 +127,13 @@ function MembersPage() {
   if (!activeClub) return null;
 
   const nameMap = buildNameMap(
-    rows.map((r) => ({ id: r.user_id, full_name: r.profile?.full_name ?? null })),
+    rows.map((r) => ({ id: r.id, full_name: r.profile?.full_name ?? null })),
     "Unnamed",
   );
   const display = (id: string) => nameMap[id] || "Unnamed";
-  const byName = (a: Row, b: Row) => display(a.user_id).localeCompare(display(b.user_id));
+  const byName = (a: Row, b: Row) => display(a.id).localeCompare(display(b.id));
 
-  // Partner index: user_id -> first partner user_id (for "partner name" display)
+  // Partner index: member_id -> first partner member_id (for "partner name" display)
   const partnerOf: Record<string, string | undefined> = {};
   partners.forEach((p) => {
     if (!partnerOf[p.driver_id]) partnerOf[p.driver_id] = p.crew_id;
@@ -188,7 +188,7 @@ function MembersPageInner({
     const q = search.trim().toLowerCase();
     return approved.filter((r) => {
       if (q) {
-        const name = display(r.user_id).toLowerCase();
+        const name = display(r.id).toLowerCase();
         const phone = (r.profile?.phone ?? "").toLowerCase();
         if (!name.includes(q) && !phone.includes(q)) return false;
       }
@@ -250,8 +250,8 @@ function MembersPageInner({
             <MemberRow
               key={m.id}
               row={m}
-              displayName={display(m.user_id)}
-              partnerName={partnerOf[m.user_id] ? display(partnerOf[m.user_id]!) : null}
+              displayName={display(m.id)}
+              partnerName={partnerOf[m.id] ? display(partnerOf[m.id]!) : null}
               roles={roles[m.user_id] ?? []}
               canManage={canManage}
               canRemove={isAdmin}
@@ -312,7 +312,8 @@ function PartnersPanel({
   nameOf: (id: string) => string;
   onChange: () => void;
 }) {
-  const [driver, setDriver] = useState(canManageAll ? "" : (currentUserId ?? ""));
+  const myMemberId = approved.find((r) => r.user_id === currentUserId)?.id ?? null;
+  const [driver, setDriver] = useState(canManageAll ? "" : (myMemberId ?? ""));
   const [crew, setCrew] = useState("");
 
   const pairExists = (a: string, b: string) =>
@@ -351,19 +352,19 @@ function PartnersPanel({
   const pairKey = (p: Partner) =>
     [nameOf(p.driver_id), nameOf(p.crew_id)].sort().join("|");
   const sortedPartners = [...partners].sort((a, b) => pairKey(a).localeCompare(pairKey(b)));
-  const myPairs = currentUserId
-    ? sortedPartners.filter((p) => p.driver_id === currentUserId || p.crew_id === currentUserId)
+  const myPairs = myMemberId
+    ? sortedPartners.filter((p) => p.driver_id === myMemberId || p.crew_id === myMemberId)
     : [];
   const otherPairs = sortedPartners.filter((p) => !myPairs.includes(p));
   const canRemove = (p: Partner) =>
-    canManageAll || p.driver_id === currentUserId || p.crew_id === currentUserId;
+    canManageAll || p.driver_id === myMemberId || p.crew_id === myMemberId;
 
   // For members: driver locked to themselves, crew = any other approved member
   // For admins/coaches: free choice of both
   const driverOptions = canManageAll
     ? approved
-    : approved.filter((r) => r.user_id === currentUserId);
-  const crewOptions = approved.filter((r) => r.user_id !== driver);
+    : approved.filter((r) => r.id === myMemberId);
+  const crewOptions = approved.filter((r) => r.id !== driver);
 
   return (
     <>
@@ -378,8 +379,8 @@ function PartnersPanel({
           <SelectTrigger className="h-9"><SelectValue placeholder="Driver…" /></SelectTrigger>
           <SelectContent>
             {driverOptions.map((r) => (
-              <SelectItem key={r.user_id} value={r.user_id} disabled={r.user_id === crew}>
-                {nameOf(r.user_id)}
+              <SelectItem key={r.id} value={r.id} disabled={r.id === crew}>
+                {nameOf(r.id)}
               </SelectItem>
             ))}
           </SelectContent>
@@ -388,8 +389,8 @@ function PartnersPanel({
           <SelectTrigger className="h-9"><SelectValue placeholder="Teammate…" /></SelectTrigger>
           <SelectContent>
             {crewOptions.map((r) => (
-              <SelectItem key={r.user_id} value={r.user_id} disabled={r.user_id === driver}>
-                {nameOf(r.user_id)}
+              <SelectItem key={r.id} value={r.id} disabled={r.id === driver}>
+                {nameOf(r.id)}
               </SelectItem>
             ))}
           </SelectContent>
