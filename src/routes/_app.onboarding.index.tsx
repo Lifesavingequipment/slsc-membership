@@ -121,7 +121,7 @@ function Onboarding() {
       .eq("user_id", user.id)
       .eq("club_id", clubId)
       .maybeSingle();
-    let error = null;
+    let error: { message: string } | null = null;
     if (!existing) {
       const res = await supabase.from("club_memberships").insert({
         user_id: user.id, club_id: clubId, status: "pending",

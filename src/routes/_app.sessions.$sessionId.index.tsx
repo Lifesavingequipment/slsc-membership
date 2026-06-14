@@ -14,7 +14,6 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
 import {
   Calendar, MapPin, ChevronLeft, Users, Trash2, Clock, Plus, Share2, Lock, Pencil,
 } from "lucide-react";
@@ -77,7 +76,6 @@ function SessionDetail() {
 
   const [session, setSession] = useState<Session | null>(null);
   const [rsvps, setRsvps] = useState<Rsvp[]>([]);
-  const [teams, setTeams] = useState<Team[]>([]);
   const [attendance, setAttendance] = useState<Attendance[]>([]);
   const [members, setMembers] = useState<Member[]>([]);
   const [busy, setBusy] = useState(false);
@@ -118,9 +116,6 @@ function SessionDetail() {
         ? (memberNameMap.get(x.member_id) ?? null)
         : (x.user_id ? (profNameMap.get(x.user_id) ?? null) : null),
     })));
-    const { data: t } = await supabase.from("session_teams").select("*")
-      .eq("session_id", sessionId).order("wave").order("lane");
-    setTeams((t ?? []) as Team[]);
     const { data: a } = await supabase.from("session_attendance").select("id, user_id, status, note")
       .eq("session_id", sessionId);
     setAttendance((a ?? []) as Attendance[]);
@@ -462,213 +457,6 @@ function RsvpList({ title, rows, tone, canManage, busy, onSetStatus, nameOf, ent
         {rows.length === 0 && <div className="text-xs text-muted-foreground">No one yet.</div>}
       </div>
     </Card>
-  );
-}
-
-/* ----------------------------- Waves / Teams ----------------------------- */
-
-function TeamsPanel({
-  sessionId, teams, members, goingIds, session, canManage, onChange,
-}: {
-  sessionId: string;
-  teams: Team[];
-  members: Member[];
-  goingIds: string[];
-  session: Session;
-  canManage: boolean;
-  onChange: () => void;
-}) {
-  const confirm = useConfirm();
-  // Only confirmed (going) members are assignable
-  const goingSet = new Set(goingIds);
-  const eligible = members.filter((m) => goingSet.has(m.id));
-  // Always include anyone already assigned (in case their RSVP changed later)
-  const assignedIds = new Set<string>();
-  teams.forEach((t) => {
-    [t.driver_id, t.crew_id, t.patient_id].forEach((id) => { if (id) assignedIds.add(id); });
-  });
-  const extras = members.filter((m) => assignedIds.has(m.id) && !goingSet.has(m.id));
-  const pickable = [...eligible, ...extras];
-
-  const memberName = (id: string | null) =>
-    id ? members.find((m) => m.id === id)?.full_name ?? "Member" : "—";
-
-  const grouped = useMemo(() => {
-    return teams.reduce<Record<number, Team[]>>((acc, t) => {
-      (acc[t.wave] ||= []).push(t); return acc;
-    }, {});
-  }, [teams]);
-
-  const addLane = async (wave: number) => {
-    const lanesInWave = teams.filter((t) => t.wave === wave);
-    const lane = (lanesInWave.reduce((mx, t) => Math.max(mx, t.lane), 0) || 0) + 1;
-    if (lane > 5) { toast.error("Max 5 lanes per wave"); return; }
-    const { error } = await supabase.from("session_teams").insert({
-      session_id: sessionId, wave, lane,
-    });
-    if (error) toast.error(error.message); else onChange();
-  };
-
-  const addWave = async () => {
-    const nextWave = (Object.keys(grouped).map(Number).reduce((mx, w) => Math.max(mx, w), 0) || 0) + 1;
-    const { error } = await supabase.from("session_teams").insert({
-      session_id: sessionId, wave: nextWave, lane: 1,
-    });
-    if (error) toast.error(error.message); else onChange();
-  };
-
-  const updateTeam = async (id: string, patch: Partial<Team>) => {
-    const { error } = await supabase.from("session_teams").update(patch).eq("id", id);
-    if (error) toast.error(error.message); else onChange();
-  };
-
-  const assign = async (
-    team: Team, role: "driver_id" | "crew_id" | "patient_id", value: string | null,
-  ) => {
-    if (value) {
-      // Check duplicate in same wave (other lanes / other roles)
-      const dup = teams.some((t) => t.wave === team.wave && t.id !== team.id && (
-        t.driver_id === value || t.crew_id === value || t.patient_id === value
-      ));
-      const sameLaneDup = (["driver_id", "crew_id", "patient_id"] as const)
-        .some((r) => r !== role && team[r] === value);
-      if (dup || sameLaneDup) {
-        toast.error("That member is already in this wave");
-        return;
-      }
-    }
-    await updateTeam(team.id, { [role]: value } as Partial<Team>);
-  };
-
-  const deleteTeam = async (id: string) => {
-    const ok = await confirm({ title: "Remove this lane?", description: "The driver/crew assignment will be cleared." });
-    if (!ok) return;
-    const { error } = await supabase.from("session_teams").delete().eq("id", id);
-    if (error) toast.error(error.message); else onChange();
-  };
-
-  const share = async () => {
-    const lines: string[] = [];
-    lines.push(`Training Session: ${session.title} — ${format(new Date(session.starts_at), "EEE d MMM yyyy")}`);
-    lines.push("");
-    Object.keys(grouped).map(Number).sort((a, b) => a - b).forEach((w) => {
-      const name = grouped[w].find((t) => t.wave_name)?.wave_name?.trim();
-      lines.push(name ? `${name}` : `Wave ${w}`);
-      grouped[w].slice().sort((a, b) => a.lane - b.lane).forEach((t) => {
-        lines.push(`Lane ${t.lane}: Driver - ${memberName(t.driver_id)} | Crew - ${memberName(t.crew_id)} | Patient - ${memberName(t.patient_id)}`);
-      });
-      lines.push("");
-    });
-    const text = lines.join("\n").trim();
-    try {
-      if (navigator.share) {
-        await navigator.share({ text, title: session.title });
-      } else {
-        await navigator.clipboard.writeText(text);
-        toast.success("Draw copied to clipboard");
-      }
-    } catch {
-      try {
-        await navigator.clipboard.writeText(text);
-        toast.success("Draw copied to clipboard");
-      } catch { /* ignore */ }
-    }
-  };
-
-  if (!canManage && teams.length === 0) {
-    return (
-      <Card className="p-4 text-sm text-muted-foreground text-center">
-        The draw hasn't been set yet.
-      </Card>
-    );
-  }
-
-  const waves = Object.keys(grouped).map(Number).sort((a, b) => a - b);
-
-  return (
-    <div className="space-y-4">
-      {canManage && (
-        <div className="flex gap-2">
-          <Button onClick={addWave} variant="outline" className="flex-1">
-            <Plus className="h-4 w-4 mr-1" /> Add wave
-          </Button>
-          <Button onClick={share} variant="outline" className="flex-1" disabled={teams.length === 0}>
-            <Share2 className="h-4 w-4 mr-1" /> Share draw
-          </Button>
-        </div>
-      )}
-      {!canManage && teams.length > 0 && (
-        <Button onClick={share} variant="outline" className="w-full">
-          <Share2 className="h-4 w-4 mr-1" /> Share draw
-        </Button>
-      )}
-
-      {teams.length === 0 && canManage && (
-        <Card className="p-4 text-sm text-muted-foreground text-center">
-          No waves yet. Tap “Add wave” to start the draw.
-        </Card>
-      )}
-
-      {waves.map((w) => {
-        const lanes = grouped[w].slice().sort((a, b) => a.lane - b.lane);
-        const waveName = lanes.find((t) => t.wave_name)?.wave_name ?? "";
-        return (
-          <Card key={w} className="p-4 space-y-3">
-            <div className="flex items-center gap-2">
-              <div className="text-sm font-semibold whitespace-nowrap">Wave {w}</div>
-              {canManage ? (
-                <Input
-                  placeholder="Custom name (optional)"
-                  defaultValue={waveName}
-                  className="h-8 flex-1"
-                  onBlur={(e) => {
-                    const v = e.target.value.trim() || null;
-                    lanes.forEach((t) => {
-                      if ((t.wave_name ?? null) !== v) updateTeam(t.id, { wave_name: v });
-                    });
-                  }}
-                />
-              ) : waveName ? (
-                <span className="text-sm text-muted-foreground">· {waveName}</span>
-              ) : null}
-            </div>
-
-            {lanes.map((t) => {
-              const missing = !t.driver_id || !t.crew_id || !t.patient_id;
-              return (
-                <div key={t.id} className="rounded-lg border p-3 space-y-2">
-                  <div className="flex items-center justify-between">
-                    <div className="text-sm font-medium">Lane {t.lane}</div>
-                    {canManage && (
-                      <Button size="icon" variant="ghost" onClick={() => deleteTeam(t.id)}>
-                        <Trash2 className="h-4 w-4 text-destructive" />
-                      </Button>
-                    )}
-                  </div>
-                  <RolePicker label="Driver" value={t.driver_id} members={pickable} disabled={!canManage}
-                    onChange={(v) => assign(t, "driver_id", v)} />
-                  <RolePicker label="Crew" value={t.crew_id} members={pickable} disabled={!canManage}
-                    onChange={(v) => assign(t, "crew_id", v)} />
-                  <RolePicker label="Patient" value={t.patient_id} members={pickable} disabled={!canManage}
-                    onChange={(v) => assign(t, "patient_id", v)} />
-                  {missing && (
-                    <div className="text-[11px] text-warning">⚠ Missing {[
-                      !t.driver_id && "driver", !t.crew_id && "crew", !t.patient_id && "patient",
-                    ].filter(Boolean).join(", ")}.</div>
-                  )}
-                </div>
-              );
-            })}
-
-            {canManage && lanes.length < 5 && (
-              <Button variant="ghost" size="sm" className="w-full" onClick={() => addLane(w)}>
-                <Plus className="h-4 w-4 mr-1" /> Add lane
-              </Button>
-            )}
-          </Card>
-        );
-      })}
-    </div>
   );
 }
 

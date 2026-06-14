@@ -19,7 +19,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Label } from "@/components/ui/label";
-import { ChevronLeft, Trash2, Phone, Users, Pencil, Search, ArrowLeftRight } from "lucide-react";
+import { ChevronLeft, Trash2, Phone, Pencil, Search, ArrowLeftRight } from "lucide-react";
 import { toast } from "sonner";
 import { buildNameMap } from "@/lib/names";
 import { roleBadgeClass, roleLabel } from "@/lib/role-colors";

@@ -183,11 +183,13 @@ export function WavePanel({
     const existing = slotMap.get(`${wave}:${lane}`);
     let error: { message: string } | null = null;
     if (existing) {
-      ({ error } = await supabase.from("session_teams").update({ [role]: memberId }).eq("id", existing.id));
+      const patch = role === "driver_id" ? { driver_id: memberId } : { crew_id: memberId };
+      ({ error } = await supabase.from("session_teams").update(patch).eq("id", existing.id));
     } else {
-      ({ error } = await supabase.from("session_teams").insert({
-        session_id: sessionId, wave, lane, [role]: memberId,
-      }));
+      const row = role === "driver_id"
+        ? { session_id: sessionId, wave, lane, driver_id: memberId }
+        : { session_id: sessionId, wave, lane, crew_id: memberId };
+      ({ error } = await supabase.from("session_teams").insert(row));
     }
     setBusy(false);
     if (error) { toast.error(error.message); return; }
@@ -203,7 +205,7 @@ export function WavePanel({
 
     let di = 0;
     let ci = 0;
-    const ops: Promise<any>[] = [];
+    const ops: PromiseLike<unknown>[] = [];
 
     outer: for (let w = 1; w <= cfg.waves_count; w++) {
       for (let l = 1; l <= cfg.lanes_count; l++) {
@@ -214,9 +216,10 @@ export function WavePanel({
         const driverToSet = !hasDriver && di < availDrivers.length ? availDrivers[di++].id : undefined;
         const crewToSet = !hasCrew && ci < availCrew.length ? availCrew[ci++].id : undefined;
         if (driverToSet === undefined && crewToSet === undefined) continue;
-        const patch: Record<string, string> = {};
-        if (driverToSet !== undefined) patch.driver_id = driverToSet;
-        if (crewToSet !== undefined) patch.crew_id = crewToSet;
+        const patch = {
+          ...(driverToSet !== undefined ? { driver_id: driverToSet } : {}),
+          ...(crewToSet !== undefined ? { crew_id: crewToSet } : {}),
+        } as { driver_id?: string; crew_id?: string };
         if (slot) {
           ops.push(supabase.from("session_teams").update(patch).eq("id", slot.id));
         } else {
