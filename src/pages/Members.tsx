@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback, useRef } from 'react'
-import { ChevronLeft, UserPlus, Search, X, Plus, Award, AlertTriangle, Pencil, Trash2 } from 'lucide-react'
+import { ChevronLeft, UserPlus, Search, X, Plus, Award, AlertTriangle, Pencil, Trash2, Users } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../context/AuthContext'
 import type { Member, Role, Qualification, MemberQualification } from '../types/database'
@@ -699,6 +699,297 @@ function MembersList({ onView }: ListViewProps) {
   )
 }
 
+// ─── PREFERRED PARTNER CARD ──────────────────────────────────────────────────
+
+interface MemberPartner {
+  id: string
+  club_id: string
+  driver_id: string
+  crew_id: string
+  created_by: string | null
+  created_at: string | null
+  updated_at: string | null
+}
+
+function PreferredPartnerCard({ member, showToast }: { member: Member; showToast: (msg: string, type: 'success' | 'error') => void }) {
+  const { user } = useAuth()
+  const [partnerRow, setPartnerRow]   = useState<MemberPartner | null>(null)
+  const [partnerMember, setPartnerMember] = useState<Member | null>(null)
+  const [loading, setLoading]         = useState(true)
+  const [dialogOpen, setDialogOpen]   = useState(false)
+  const [allMembers, setAllMembers]   = useState<Member[]>([])
+  const [search, setSearch]           = useState('')
+  const [selected, setSelected]       = useState<Member | null>(null)
+  const [role, setRole]               = useState<'driver' | 'crew'>('driver')
+  const [saving, setSaving]           = useState(false)
+  const [removing, setRemoving]       = useState(false)
+  const [conflictPartner, setConflictPartner] = useState<Member | null>(null)
+  const [pendingConfirm, setPendingConfirm]   = useState(false)
+
+  const isDriver = !!member.driver_flag && !member.crew_flag
+  const isCrew   = !!member.crew_flag   && !member.driver_flag
+  const needsRolePick = !isDriver && !isCrew
+
+  const resolvedRole = isDriver ? 'driver' : isCrew ? 'crew' : role
+
+  const load = useCallback(async () => {
+    setLoading(true)
+    const { data } = await supabase
+      .from('member_partners')
+      .select('*')
+      .eq('club_id', member.club_id)
+      .or(`driver_id.eq.${member.id},crew_id.eq.${member.id}`)
+      .maybeSingle()
+    if (data) {
+      setPartnerRow(data as MemberPartner)
+      const partnerId = data.driver_id === member.id ? data.crew_id : data.driver_id
+      const { data: pm } = await supabase.from('members').select('*').eq('id', partnerId).maybeSingle()
+      setPartnerMember(pm as Member | null)
+    } else {
+      setPartnerRow(null)
+      setPartnerMember(null)
+    }
+    setLoading(false)
+  }, [member.id, member.club_id])
+
+  useEffect(() => { load() }, [load])
+
+  const openDialog = async () => {
+    setSearch('')
+    setSelected(null)
+    setConflictPartner(null)
+    setPendingConfirm(false)
+    if (!needsRolePick) setRole(resolvedRole)
+    const { data } = await supabase
+      .from('members')
+      .select('*')
+      .eq('club_id', member.club_id)
+      .eq('membership_status', 'active')
+      .neq('id', member.id)
+      .order('last_name')
+    setAllMembers((data ?? []) as Member[])
+    setDialogOpen(true)
+  }
+
+  const checkConflict = async (candidate: Member): Promise<Member | null> => {
+    const { data } = await supabase
+      .from('member_partners')
+      .select('*')
+      .eq('club_id', member.club_id)
+      .or(`driver_id.eq.${candidate.id},crew_id.eq.${candidate.id}`)
+      .maybeSingle()
+    if (!data) return null
+    const otherId = data.driver_id === candidate.id ? data.crew_id : data.driver_id
+    if (otherId === member.id) return null
+    const { data: other } = await supabase.from('members').select('*').eq('id', otherId).maybeSingle()
+    return (other as Member | null)
+  }
+
+  const doSave = async (overwrite: boolean) => {
+    if (!selected) return
+    setSaving(true)
+    const myRole = needsRolePick ? role : resolvedRole
+    const driverId = myRole === 'driver' ? member.id : selected.id
+    const crewId   = myRole === 'driver' ? selected.id : member.id
+
+    if (overwrite) {
+      await supabase
+        .from('member_partners')
+        .delete()
+        .eq('club_id', member.club_id)
+        .or(`driver_id.eq.${selected.id},crew_id.eq.${selected.id}`)
+    }
+
+    const upsertData = partnerRow
+      ? { id: partnerRow.id, club_id: member.club_id, driver_id: driverId, crew_id: crewId, updated_at: new Date().toISOString() }
+      : { club_id: member.club_id, driver_id: driverId, crew_id: crewId, created_by: user?.email ?? null }
+
+    const { error } = await supabase.from('member_partners').upsert(upsertData, { onConflict: 'id' })
+    setSaving(false)
+    if (error) { showToast('Failed to save partner.', 'error'); return }
+    setDialogOpen(false)
+    showToast('Preferred partner saved.', 'success')
+    load()
+  }
+
+  const handleSave = async () => {
+    if (!selected) return
+    const conflict = await checkConflict(selected)
+    if (conflict) {
+      setConflictPartner(conflict)
+      setPendingConfirm(true)
+      return
+    }
+    doSave(false)
+  }
+
+  const handleRemove = async () => {
+    if (!partnerRow) return
+    setRemoving(true)
+    const { error } = await supabase.from('member_partners').delete().eq('id', partnerRow.id)
+    setRemoving(false)
+    if (error) { showToast('Failed to remove partner.', 'error'); return }
+    showToast('Partner removed.', 'success')
+    load()
+  }
+
+  const filtered = allMembers.filter(m => {
+    const q = search.toLowerCase()
+    return !q || displayName(m).toLowerCase().includes(q) || (m.email ?? '').toLowerCase().includes(q)
+  })
+
+  return (
+    <>
+      <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-5 space-y-3">
+        <div className="flex items-center justify-between">
+          <SectionHeading>Preferred Partner</SectionHeading>
+          <Users className="w-4 h-4 text-gray-300" />
+        </div>
+
+        {loading ? (
+          <p className="text-xs text-gray-400">Loading…</p>
+        ) : partnerMember ? (
+          <div className="flex items-center justify-between gap-2">
+            <div className="flex items-center gap-2.5 min-w-0">
+              <Avatar member={partnerMember} size="sm" />
+              <div className="min-w-0">
+                <p className="text-sm font-medium text-gray-900 truncate">{displayName(partnerMember)}</p>
+                <p className="text-xs text-gray-400 truncate">
+                  {partnerRow?.driver_id === member.id ? 'You: Driver' : 'You: Crew'}
+                </p>
+              </div>
+            </div>
+            <div className="flex gap-1.5 shrink-0">
+              <button
+                onClick={openDialog}
+                className="text-xs px-2.5 py-1 rounded-md border border-gray-300 text-gray-600 hover:bg-gray-50 font-medium"
+              >
+                Change
+              </button>
+              <button
+                onClick={handleRemove}
+                disabled={removing}
+                className="text-xs px-2.5 py-1 rounded-md border border-red-200 text-red-600 hover:bg-red-50 font-medium disabled:opacity-50"
+              >
+                {removing ? '…' : 'Remove'}
+              </button>
+            </div>
+          </div>
+        ) : (
+          <div>
+            <p className="text-xs text-gray-400 mb-2">No preferred partner set</p>
+            <button
+              onClick={openDialog}
+              className="flex items-center gap-1.5 text-xs font-medium text-[#E63329] hover:text-red-700"
+            >
+              <Plus className="w-3.5 h-3.5" /> Set partner
+            </button>
+          </div>
+        )}
+      </div>
+
+      {/* Dialog */}
+      {dialogOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-md flex flex-col max-h-[80vh]">
+            <div className="flex items-center justify-between px-5 pt-5 pb-3 border-b border-gray-100">
+              <h3 className="text-base font-semibold text-gray-900">Set Preferred Partner</h3>
+              <button onClick={() => setDialogOpen(false)} className="text-gray-400 hover:text-gray-600">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="px-5 py-3 border-b border-gray-100">
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                <input
+                  type="text"
+                  value={search}
+                  onChange={e => setSearch(e.target.value)}
+                  placeholder="Search members…"
+                  className="w-full pl-9 pr-3 h-9 rounded-md border border-gray-300 text-sm focus:outline-none focus:ring-2 focus:ring-[#E63329]"
+                />
+              </div>
+            </div>
+
+            <div className="overflow-y-auto flex-1 px-2 py-2">
+              {filtered.length === 0 ? (
+                <p className="text-xs text-gray-400 text-center py-4">No members found</p>
+              ) : (
+                filtered.map(m => (
+                  <button
+                    key={m.id}
+                    onClick={() => setSelected(m)}
+                    className={cn(
+                      'w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-left transition-colors',
+                      selected?.id === m.id
+                        ? 'bg-red-50 border border-[#E63329]'
+                        : 'hover:bg-gray-50 border border-transparent'
+                    )}
+                  >
+                    <Avatar member={m} size="sm" />
+                    <div className="min-w-0">
+                      <p className="text-sm font-medium text-gray-900 truncate">{displayName(m)}</p>
+                      <p className="text-xs text-gray-400 truncate">{m.email}</p>
+                    </div>
+                  </button>
+                ))
+              )}
+            </div>
+
+            {needsRolePick && (
+              <div className="px-5 py-3 border-t border-gray-100">
+                <p className="text-xs text-gray-500 mb-2 font-medium">Your role in this pairing</p>
+                <div className="flex gap-3">
+                  {(['driver', 'crew'] as const).map(r => (
+                    <button
+                      key={r}
+                      onClick={() => setRole(r)}
+                      className={cn(
+                        'flex-1 py-2 rounded-lg text-sm font-medium border transition-colors capitalize',
+                        role === r ? 'bg-[#E63329] text-white border-[#E63329]' : 'bg-white text-gray-500 border-gray-300'
+                      )}
+                    >
+                      {r}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {pendingConfirm && conflictPartner && (
+              <div className="mx-5 mb-3 mt-1 p-3 bg-amber-50 border border-amber-200 rounded-lg flex gap-2">
+                <AlertTriangle className="w-4 h-4 text-amber-500 shrink-0 mt-0.5" />
+                <p className="text-xs text-amber-800">
+                  <strong>{displayName(selected!)}</strong> is currently partnered with <strong>{displayName(conflictPartner)}</strong>. Saving will replace that pairing.
+                </p>
+              </div>
+            )}
+
+            <div className="px-5 pb-5 pt-3 flex gap-3 border-t border-gray-100">
+              {pendingConfirm ? (
+                <>
+                  <Button onClick={() => doSave(true)} disabled={saving} className="flex-1">
+                    {saving ? 'Saving…' : 'Overwrite & Save'}
+                  </Button>
+                  <Button variant="outline" onClick={() => setPendingConfirm(false)} className="flex-1">Back</Button>
+                </>
+              ) : (
+                <>
+                  <Button onClick={handleSave} disabled={!selected || saving} className="flex-1">
+                    {saving ? 'Saving…' : 'Save'}
+                  </Button>
+                  <Button variant="outline" onClick={() => setDialogOpen(false)} className="flex-1">Cancel</Button>
+                </>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+    </>
+  )
+}
+
 // ─── MEMBER PROFILE VIEW ──────────────────────────────────────────────────────
 
 type ProfileMode = 'view' | 'edit'
@@ -1086,6 +1377,9 @@ function MemberProfile({ member: initialMember, onBack, onUpdated }: ProfileView
             </div>
 
           </div>
+
+          {/* Preferred Partner */}
+          <PreferredPartnerCard member={member} showToast={showToast} />
 
           {/* Roles */}
           <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-5 space-y-3">
