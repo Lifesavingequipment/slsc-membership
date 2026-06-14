@@ -1,6 +1,7 @@
 import { LogOut, User } from 'lucide-react'
 import { useAuth } from '../../context/AuthContext'
 import { Button } from '../ui/button'
+import { NotificationBell } from '../NotificationBell'
 
 interface HeaderProps {
   clubName?: string
@@ -21,6 +22,7 @@ export function Header({ clubName = 'Surf Life Saving Club' }: HeaderProps) {
 
       {/* Desktop: email + sign out */}
       <div className="hidden md:flex items-center gap-4">
+        <NotificationBell />
         <div className="flex items-center gap-2 text-sm text-gray-600">
           <div className="w-8 h-8 rounded-full bg-[#FFD700] flex items-center justify-center">
             <User className="w-4 h-4 text-gray-800" />
